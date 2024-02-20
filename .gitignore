@@ -1,0 +1,6 @@
+.env
+go.sum
+.exe
+.gitignore
+.idea
+statics
