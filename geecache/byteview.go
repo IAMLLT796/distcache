@@ -1,4 +1,4 @@
-package distcache
+package geecache
 
 /*
 	ByteView用来表示缓存值

@@ -1,4 +1,4 @@
-package distcache
+package geecache
 
 import (
 	"fmt"
@@ -16,12 +16,12 @@ func TestGetter(t *testing.T) {
 	except := []byte("key")
 
 	if v, _ := f.Get("key"); !reflect.DeepEqual(v, except) {
+		t.Fatal("callback failed")
 	}
-	t.Errorf("callback failed")
 }
 
 // 使用一个 map 模拟耗时的数据库
-var db = map[string]string{
+var db0 = map[string]string{
 	"Tom":  "630",
 	"Jack": "589",
 	"Sam":  "567",
@@ -29,11 +29,11 @@ var db = map[string]string{
 
 // 创建 group 实例
 func TestGet(t *testing.T) {
-	loadCounts := make(map[string]int, len(db))
+	loadCounts := make(map[string]int, len(db0))
 	dist := NewGroup("scores", 2<<10, GetterFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
-			if v, ok := db[key]; ok {
+			if v, ok := db0[key]; ok {
 				if _, ok := loadCounts[key]; !ok {
 					loadCounts[key] = 0
 				}
@@ -42,7 +42,7 @@ func TestGet(t *testing.T) {
 			}
 			return nil, fmt.Errorf("%s not exist", key)
 		}))
-	for k, v := range db {
+	for k, v := range db0 {
 		if view, err := dist.Get(k); err != nil || view.String() != v {
 			t.Fatal("failed to get value of Tom")
 		}
