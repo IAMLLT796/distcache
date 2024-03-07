@@ -24,6 +24,36 @@ type Group struct {
 	name      string // 每个 Group 拥有一个唯一的名称 name
 	getter    Getter // 缓存未命中时获取数据的回调(callback)
 	mainCache cache  // 一开始实现的并发缓存
+	peers     PeerPicker
+}
+
+// 注册节点选择器
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+}
+
+func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err != nil {
+				return value, err
+			}
+			log.Println("[distcache] Failed to get from peer", err)
+		}
+	}
+	return g.getLocally(key)
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key) // 从对应 group 查找缓存值
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: cloneBytes(bytes)}, nil
+
 }
 
 var (
@@ -66,10 +96,6 @@ func (g *Group) Get(key string) (ByteView, error) {
 		return v, nil
 	}
 	return g.load(key)
-}
-
-func (g *Group) load(key string) (value ByteView, err error) {
-	return g.getLocally(key)
 }
 
 func (g *Group) getLocally(key string) (ByteView, error) {

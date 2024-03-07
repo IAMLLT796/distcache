@@ -23,10 +23,11 @@ const (
 )
 
 // HTTPPool 实现了 PeerPicker 接口
+// HTTPPool 作为承载节点间 HTTP 通信的核心数据结构，包括服务端和客户端
 type HTTPPool struct {
 	// HTTP 节点之间的基础通信地址
-	self        string
-	basePath    string
+	self        string // 记录自己的地址，包括主机名/IP 和端口
+	basePath    string // 作为节点间通讯地址的前缀，默认是 /_distcache/
 	mu          sync.Mutex
 	peers       *consistenthash.Map    // 根据具体的 key 选择节点
 	httpGetters map[string]*httpGetter // 映射远程节点的 httpGetter, 每一个远程节点对应一个 httpGetter
@@ -80,6 +81,7 @@ type httpGetter struct {
 	baseURL string
 }
 
+// Set 实例化一致性哈希算法，并且添加了传入的节点
 func (p *HTTPPool) Set(peers ...string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -90,6 +92,8 @@ func (p *HTTPPool) Set(peers ...string) {
 		p.httpGetters[peer] = &httpGetter{baseURL: peer + p.basePath}
 	}
 }
+
+// 包装了一致性哈希算法的 Get() 方法
 func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
