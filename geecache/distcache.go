@@ -1,6 +1,7 @@
 package geecache
 
 import (
+	"distcache/geecache/singleflight"
 	"fmt"
 	"log"
 	"sync"
@@ -25,6 +26,8 @@ type Group struct {
 	getter    Getter // 缓存未命中时获取数据的回调(callback)
 	mainCache cache  // 一开始实现的并发缓存
 	peers     PeerPicker
+	// 使用 singleflight.Group 确认每个 key 只获取一次
+	loader *singleflight.Group
 }
 
 // 注册节点选择器
@@ -36,15 +39,21 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.peers != nil {
-		if peer, ok := g.peers.PickPeer(key); ok {
-			if value, err = g.getFromPeer(peer, key); err != nil {
-				return value, err
+	viewi, err := g.loader.Do(key, func() (interface{}, error) {
+		if g.peers != nil {
+			if peer, ok := g.peers.PickPeer(key); ok {
+				if value, err = g.getFromPeer(peer, key); err != nil {
+					return value, err
+				}
+				log.Println("[distcache] Failed to get from peer", err)
 			}
-			log.Println("[distcache] Failed to get from peer", err)
 		}
+		return g.getLocally(key)
+	})
+	if err == nil {
+		return viewi.(ByteView), nil
 	}
-	return g.getLocally(key)
+	return
 }
 
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
@@ -73,6 +82,7 @@ func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
 		name:      name,
 		getter:    getter,
 		mainCache: cache{cacheBytes: cacheBytes},
+		loader:    &singleflight.Group{},
 	}
 	groups[name] = g
 
